@@ -4,8 +4,11 @@
 #include <psprtc.h>
 
 #define NBR_ROWS 24
-#define NBR_PIECES 4
+#define NBR_PIECES 5
 #define BLOCK_SIZE 10
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 272
+#define BUFF_HORIZONTAL_LENGTH 512
 
 PSP_MODULE_INFO("tl", 0, 1, 1);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
@@ -24,14 +27,17 @@ typedef struct {
     u32 color;
 } Piece;
 
-static u16 __attribute__((aligned(16))) rows[NBR_ROWS] = {0};
+static u16 __attribute__((aligned(8))) rows[NBR_ROWS] = {0};
 
-static Piece __attribute__((aligned(16))) pieces[NBR_PIECES] = {
-    {0x80008000800080, 0xFFFF0000},
-    {0x80038000000000, 0xFF00FF00},
-    {0x8001C000000000, 0xFF0000FF},
-    {0xC0018000000000, 0xFF00FFFF}
+static Piece __attribute__((aligned(8))) pieces[NBR_PIECES] = {
+    {0x080008000800080, 0xFFFF0000},
+    {0x080038000000000, 0xFF00FF00},
+    {0x08001C000000000, 0xFF0000FF},
+    {0x0C0018000000000, 0xFF00FFFF},
+    {0x180018000000000, 0xFF0080FF}
 };
+
+
 
 static u32* const vram[2] = {
     ((u32*)0x44000000),
@@ -74,10 +80,32 @@ u8 isCollid(u16* const target, const u64 piece) {
     return (*(u64*)target | piece) > (*(u64*)target ^ piece);
 }
 
+void dropData(u8 from) {
+    while(from--) {
+        rows[from] = from > 0 ? rows[from - 1] : 0;
+    }
+}
+
+void dropDisplay(const u8 from) {
+    const u32 bytes = BUFF_HORIZONTAL_LENGTH * BLOCK_SIZE * 4;
+    sceDmacMemcpy((void*)vram[1] + bytes, vram[1], from * bytes - bytes);
+}
+
+void removeFullRows(u16* const target, const u8 step) {
+    u8 i = 0;
+    while(i < 4) {
+        if(target[i] == 0xFFFF) {
+            dropData(step + i);
+            dropDisplay(step + i);
+        }
+        i++;
+    }
+}
+
 int main() {
     SceCtrlData pad;
-    sceDisplaySetMode(1, 480, 272);
-    sceDisplaySetFrameBuf(vram[0], 512,
+    sceDisplaySetMode(1, SCREEN_WIDTH, SCREEN_HEIGHT);
+    sceDisplaySetFrameBuf(vram[0], BUFF_HORIZONTAL_LENGTH,
     PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
     u8 step = 0, id = 0;
@@ -93,21 +121,21 @@ int main() {
     }
 
     do {
-        sceDmacMemcpy(vram[0], vram[1], 512*272*4);
+        sceDmacMemcpy(vram[0], vram[1], BUFF_HORIZONTAL_LENGTH*SCREEN_HEIGHT*4);
         sceCtrlReadBufferPositive(&pad, 1);
 
         u64 tick = 0;
         sceRtcGetCurrentTick(&tick);
 
         if(!piece) {
-            id = (tick / 3) % 4;
+            id = (tick / 3) % 5;
             piece = pieces[id].data;
             step = 0;
         }
 
         draw4Rows(0, piece, step, pieces[id].color);
 
-        if((tick - runtick) / tickres >= 250) {
+        if((tick - runtick) / tickres >= 125) { //< speed
             const u64 prev = piece;
             u16* const target = &rows[++step];
             if(pad.Buttons & PSP_CTRL_LEFT) {
@@ -121,6 +149,7 @@ int main() {
             if(isCollid(target, piece)) {
                 *(u64*)(target-1) |= piece;
                 draw4Rows(1, piece, step-1, pieces[id].color);
+                removeFullRows(target-1, step);
                 piece = 0;
             }
             runtick = tick;
