@@ -104,7 +104,8 @@ int main() {
         sceRtcGetCurrentTick(&tick);
 
         if(!piece) {
-            id = tick % 4;
+            u32 addr = 0;
+            id = (tick / 2 + ((u32)&addr)) % 4;
             piece = pieces[id].data;
             step = 0;
         }
