@@ -81,18 +81,14 @@ int main() {
     PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
     u8 step = 0, id = 0;
-    u64 piece = 0, keytick = 0, runtick = 0;
+    u64 piece = 0, runtick = 0;
 
     sceRtcGetCurrentTick(&runtick);
-    keytick = runtick;
-
     const u64 tickres = sceRtcGetTickResolution() / 1000;    
 
     u8 i = NBR_ROWS;
-    while(i--) {
-        if(i == NBR_ROWS - 1) {
-            rows[i] = 0xFFFF;
-        } else rows[i] = 0x8001;
+    while(i--) {        
+        rows[i] = (i == NBR_ROWS - 1) ? 0xFFFF : 0x8001;
         drawRow(1, rows[i], i, 0xFF808080);
     }
 
@@ -104,8 +100,7 @@ int main() {
         sceRtcGetCurrentTick(&tick);
 
         if(!piece) {
-            u32 addr = 0;
-            id = (tick / 2 + ((u32)&addr)) % 4;
+            id = (tick / 3) % 4;
             piece = pieces[id].data;
             step = 0;
         }
@@ -113,14 +108,8 @@ int main() {
         draw4Rows(0, piece, step, pieces[id].color);
 
         if((tick - runtick) / tickres >= 250) {
-            step++;
-            runtick = tick;
-        }
-
-        u16* const target = &rows[step];
-
-        if((tick - keytick) / tickres >= 250) {
             const u64 prev = piece;
+            u16* const target = &rows[++step];
             if(pad.Buttons & PSP_CTRL_LEFT) {
                 piece <<= 1;
             } else if(pad.Buttons & PSP_CTRL_RIGHT) {
@@ -129,15 +118,14 @@ int main() {
             if(isCollid(target, piece)) {
                 piece = prev;
             }
-            keytick = tick;
+            if(isCollid(target, piece)) {
+                *(u64*)(target-1) |= piece;
+                draw4Rows(1, piece, step-1, pieces[id].color);
+                piece = 0;
+            }
+            runtick = tick;
         }
-
-        if(isCollid(target, piece)) {
-            *(u64*)(target-1) |= piece;
-            draw4Rows(1, piece, step-1, pieces[id].color);
-            piece = 0;
-        }
-
+        
         sceDisplayWaitVblankStart();
     } while(!(pad.Buttons & PSP_CTRL_SELECT));
     sceKernelExitGame();
