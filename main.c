@@ -41,25 +41,25 @@ static Piece __attribute__((aligned(8))) pieces[NBR_PIECES_LIST] = {
     {0x080008000800080, 0xFFFF0000},
     {0x080038000000000, 0xFF00FF00},
     {0x1C0008000000000, 0xFF0000FF},
-    {0x0C0018000000000, 0xFF00FFFF},
+    {0x08000C000400000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF},
     //
     {0x3C0000000000000, 0xFFFF0000},
     {0x180008000800000, 0xFF00FF00},
     {0x08000C000800000, 0xFF0000FF},
-    {0x04000C000800000, 0xFF00FFFF},
+    {0x0C0018000000000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF},
     //
     {0x080008000800080, 0xFFFF0000},
     {0x380020000000000, 0xFF00FF00},
     {0x08001C000000000, 0xFF0000FF},
-    {0x0C0018000000000, 0xFF00FFFF},
+    {0x08000C000400000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF},
     //
     {0x3C0000000000000, 0xFFFF0000},
     {0x200020003000000, 0xFF00FF00},
     {0x080018000800000, 0xFF0000FF},
-    {0x04000C000800000, 0xFF00FFFF},
+    {0x0C0018000000000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF}
 };
 
@@ -129,10 +129,12 @@ int main() {
     PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
     u64 runtick = 0;
-    u8 step = NBR_ROWS, id = 0;
+    u8 step = NBR_ROWS, id = 0, pressed = 0;
     MovablePiece piece = {0, 0}, initial = {0, 0}; 
 
     sceRtcGetCurrentTick(&runtick);
+    u64 keytick = runtick;
+    
     const u64 tickres = sceRtcGetTickResolution() / 1000;    
 
     while(step--) {
@@ -157,16 +159,28 @@ int main() {
         
         draw4Rows(0, piece.data, step, pieces[id].color);
 
-        u16 speed = 250;
+        u16 speed = 500;
         if(pad.Buttons & PSP_CTRL_DOWN) {
             speed = 50;
         }
     
+        u16* target = &rows[step];
+        
         if((tick - runtick) / tickres >= speed) { //< speed
-            
+            target = &rows[++step];
+            runtick = tick;
+        }
+        
+        if(isCollid(target, piece.data)) {
+            *(u64*)(target-1) |= piece.data;
+            draw4Rows(1, piece.data, step-1, pieces[id].color);
+            removeFullRows(step-1);
+            piece.data = 0;
+            piece.pos = 0;
+        }
+        else if((tick - keytick) / tickres >= 100) {
             const MovablePiece prev = piece;
             
-            u16* const target = &rows[++step];
             if(pad.Buttons & PSP_CTRL_LEFT) {
                 piece.pos++;
             } else if(pad.Buttons & PSP_CTRL_RIGHT) {
@@ -174,9 +188,12 @@ int main() {
             }
             
             if(pad.Buttons & PSP_CTRL_SQUARE) {
-                id = (id + NBR_PIECES) % (NBR_PIECES_LIST); 
-                initial.data = pieces[id].data;
-            }
+                if(!pressed) {
+                    id = (id + NBR_PIECES) % (NBR_PIECES_LIST); 
+                    initial.data = pieces[id].data;
+                    pressed = 1;
+                }
+            } else pressed = 0;
         
             piece.data = piece.pos < 0 ?
             initial.data >> -piece.pos : initial.data << piece.pos;
@@ -185,14 +202,7 @@ int main() {
                 piece = prev;
             }
             
-            if(isCollid(target, piece.data)) {
-                *(u64*)(target-1) |= piece.data;
-                draw4Rows(1, piece.data, step-1, pieces[id].color);
-                removeFullRows(step-1);
-                piece.data = 0;
-                piece.pos = 0;
-            }
-            runtick = tick;
+            keytick = tick;
         }
         
         sceDisplayWaitVblankStart();
