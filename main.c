@@ -23,18 +23,30 @@ int atexit(void(*function)(void)) {
 void exit(int status) {
     while(1);
 }
+
 typedef struct {
     u64 data;
     u32 color;
 } Piece;
 
+typedef struct {
+    u64 data;
+    char pos;
+} MovablePiece;
+
 static u16 __attribute__((aligned(8))) rows[NBR_ROWS] = {0};
 
-static Piece __attribute__((aligned(8))) pieces[NBR_PIECES] = {
+static Piece __attribute__((aligned(8))) pieces[NBR_PIECES*2] = {
     {0x080008000800080, 0xFFFF0000},
     {0x080038000000000, 0xFF00FF00},
     {0x08001C000000000, 0xFF0000FF},
     {0x0C0018000000000, 0xFF00FFFF},
+    {0x180018000000000, 0xFF0080FF},
+    //
+    {0x3C0000000000000, 0xFFFF0000},
+    {0x180008000800000, 0xFF00FF00},
+    {0x08000C000800000, 0xFF0000FF},
+    {0x04000C000800000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF}
 };
 
@@ -103,8 +115,9 @@ int main() {
     sceDisplaySetFrameBuf(vram[0], HORIZONTAL_LENGTH,
     PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
+    u64 runtick = 0;
     u8 step = NBR_ROWS, id = 0;
-    u64 piece = 0, runtick = 0;
+    MovablePiece piece = {0, 0}, initial = {0, 0}; 
 
     sceRtcGetCurrentTick(&runtick);
     const u64 tickres = sceRtcGetTickResolution() / 1000;    
@@ -121,30 +134,45 @@ int main() {
         u64 tick = 0;
         sceRtcGetCurrentTick(&tick);
 
-        if(!piece) {
-            id = ((u8)(tick / 3)) % 5;
-            piece = pieces[id].data;
+        if(!piece.data) {
+            id = ((u8)(tick / 3)) % NBR_PIECES;
+            piece.data = pieces[id].data;
+            piece.pos = 0;
+            initial = piece;
             step = 0;
         }
-
-        draw4Rows(0, piece, step, pieces[id].color);
+        
+        draw4Rows(0, piece.data, step, pieces[id].color);
 
         if((tick - runtick) / tickres >= 125) { //< speed
-            const u64 prev = piece;
+            
+            const MovablePiece prev = piece;
+            
             u16* const target = &rows[++step];
             if(pad.Buttons & PSP_CTRL_LEFT) {
-                piece <<= 1;
+                piece.pos++;
             } else if(pad.Buttons & PSP_CTRL_RIGHT) {
-                piece >>= 1;
+                piece.pos--;
             }
-            if(isCollid(target, piece)) {
+            
+            if(pad.Buttons & PSP_CTRL_SQUARE) {
+                id = (id + NBR_PIECES) % (NBR_PIECES*2); 
+                initial.data = pieces[id].data;
+            }
+        
+            piece.data = piece.pos < 0 ?
+            initial.data >> -piece.pos : initial.data << piece.pos;
+        
+            if(isCollid(target, piece.data)) {
                 piece = prev;
             }
-            if(isCollid(target, piece)) {
-                *(u64*)(target-1) |= piece;
-                draw4Rows(1, piece, step-1, pieces[id].color);
+            
+            if(isCollid(target, piece.data)) {
+                *(u64*)(target-1) |= piece.data;
+                draw4Rows(1, piece.data, step-1, pieces[id].color);
                 removeFullRows(step-1);
-                piece = 0;
+                piece.data = 0;
+                piece.pos = 0;
             }
             runtick = tick;
         }
