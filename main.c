@@ -8,7 +8,8 @@
 #define BLOCK_SIZE 10
 #define SCREEN_WIDTH 480
 #define SCREEN_HEIGHT 272
-#define BUFF_HORIZONTAL_LENGTH 512
+#define HORIZONTAL_LENGTH 512
+#define HORIZONTAL_BYTES_LENGTH 2048
 
 PSP_MODULE_INFO("tl", 0, 1, 1);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
@@ -36,8 +37,6 @@ static Piece __attribute__((aligned(8))) pieces[NBR_PIECES] = {
     {0x0C0018000000000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF}
 };
-
-
 
 static u32* const vram[2] = {
     ((u32*)0x44000000),
@@ -80,55 +79,50 @@ u8 isCollid(u16* const target, const u64 piece) {
     return (*(u64*)target | piece) > (*(u64*)target ^ piece);
 }
 
-void dropData(u8 from) {
-    while(from--) {
+void drop(u8 from) {
+    const u32 bytes = HORIZONTAL_BYTES_LENGTH * BLOCK_SIZE;
+    sceDmacMemcpy((void*)vram[1] + bytes, vram[1], from * bytes);
+    do {
         rows[from] = from > 0 ? rows[from - 1] : 0;
-    }
+    } while(from--);
 }
 
-void dropDisplay(const u8 from) {
-    const u32 bytes = BUFF_HORIZONTAL_LENGTH * BLOCK_SIZE * 4;
-    sceDmacMemcpy((void*)vram[1] + bytes, vram[1], from * bytes - bytes);
-}
-
-void removeFullRows(u16* const target, const u8 step) {
-    u8 i = 0;
-    while(i < 4) {
-        if(target[i] == 0xFFFF) {
-            dropData(step + i);
-            dropDisplay(step + i);
+void removeFullRows(u8 step) {
+    const u8 end = step + 4;
+    while(step < end) {
+        if(rows[step] == 0xFFFF) {
+            drop(step);
         }
-        i++;
+        step++;
     }
 }
 
 int main() {
     SceCtrlData pad;
     sceDisplaySetMode(1, SCREEN_WIDTH, SCREEN_HEIGHT);
-    sceDisplaySetFrameBuf(vram[0], BUFF_HORIZONTAL_LENGTH,
+    sceDisplaySetFrameBuf(vram[0], HORIZONTAL_LENGTH,
     PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
-    u8 step = 0, id = 0;
+    u8 step = NBR_ROWS, id = 0;
     u64 piece = 0, runtick = 0;
 
     sceRtcGetCurrentTick(&runtick);
     const u64 tickres = sceRtcGetTickResolution() / 1000;    
 
-    u8 i = NBR_ROWS;
-    while(i--) {        
-        rows[i] = (i == NBR_ROWS - 1) ? 0xFFFF : 0x8001;
-        drawRow(1, rows[i], i, 0xFF808080);
+    while(step--) {
+        rows[step] = (step == NBR_ROWS - 1) ? 0xFFFF : 0x8001;
+        drawRow(1, rows[step], step, 0xFF808080);
     }
 
     do {
-        sceDmacMemcpy(vram[0], vram[1], BUFF_HORIZONTAL_LENGTH*SCREEN_HEIGHT*4);
+        sceDmacMemcpy(vram[0], vram[1], HORIZONTAL_BYTES_LENGTH * SCREEN_HEIGHT);
         sceCtrlReadBufferPositive(&pad, 1);
 
         u64 tick = 0;
         sceRtcGetCurrentTick(&tick);
 
         if(!piece) {
-            id = (tick / 3) % 5;
+            id = ((u8)(tick / 3)) % 5;
             piece = pieces[id].data;
             step = 0;
         }
@@ -149,7 +143,7 @@ int main() {
             if(isCollid(target, piece)) {
                 *(u64*)(target-1) |= piece;
                 draw4Rows(1, piece, step-1, pieces[id].color);
-                removeFullRows(target-1, step);
+                removeFullRows(step-1);
                 piece = 0;
             }
             runtick = tick;
