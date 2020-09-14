@@ -5,6 +5,7 @@
 
 #define NBR_ROWS 24
 #define NBR_PIECES 5
+#define NBR_PIECES_LIST 20
 #define BLOCK_SIZE 10
 #define SCREEN_WIDTH 480
 #define SCREEN_HEIGHT 272
@@ -36,16 +37,28 @@ typedef struct {
 
 static u16 __attribute__((aligned(8))) rows[NBR_ROWS] = {0};
 
-static Piece __attribute__((aligned(8))) pieces[NBR_PIECES*2] = {
+static Piece __attribute__((aligned(8))) pieces[NBR_PIECES_LIST] = {
     {0x080008000800080, 0xFFFF0000},
     {0x080038000000000, 0xFF00FF00},
-    {0x08001C000000000, 0xFF0000FF},
+    {0x1C0008000000000, 0xFF0000FF},
     {0x0C0018000000000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF},
     //
     {0x3C0000000000000, 0xFFFF0000},
     {0x180008000800000, 0xFF00FF00},
     {0x08000C000800000, 0xFF0000FF},
+    {0x04000C000800000, 0xFF00FFFF},
+    {0x180018000000000, 0xFF0080FF},
+    //
+    {0x080008000800080, 0xFFFF0000},
+    {0x380020000000000, 0xFF00FF00},
+    {0x08001C000000000, 0xFF0000FF},
+    {0x0C0018000000000, 0xFF00FFFF},
+    {0x180018000000000, 0xFF0080FF},
+    //
+    {0x3C0000000000000, 0xFFFF0000},
+    {0x200020003000000, 0xFF00FF00},
+    {0x080018000800000, 0xFF0000FF},
     {0x04000C000800000, 0xFF00FFFF},
     {0x180018000000000, 0xFF0080FF}
 };
@@ -144,7 +157,12 @@ int main() {
         
         draw4Rows(0, piece.data, step, pieces[id].color);
 
-        if((tick - runtick) / tickres >= 125) { //< speed
+        u16 speed = 250;
+        if(pad.Buttons & PSP_CTRL_DOWN) {
+            speed = 50;
+        }
+    
+        if((tick - runtick) / tickres >= speed) { //< speed
             
             const MovablePiece prev = piece;
             
@@ -156,7 +174,7 @@ int main() {
             }
             
             if(pad.Buttons & PSP_CTRL_SQUARE) {
-                id = (id + NBR_PIECES) % (NBR_PIECES*2); 
+                id = (id + NBR_PIECES) % (NBR_PIECES_LIST); 
                 initial.data = pieces[id].data;
             }
         
