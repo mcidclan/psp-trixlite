@@ -6,13 +6,13 @@
 #define NBR_ROWS 24
 #define NBR_PIECES 5
 #define NBR_PIECES_LIST 20
-#define BLOCK_SIZE 10
+#define BLOCK_SIZE 11
 #define SCREEN_WIDTH 480
 #define SCREEN_HEIGHT 272
 #define HORIZONTAL_LENGTH 512
 #define HORIZONTAL_BYTES_LENGTH 2048
 
-PSP_MODULE_INFO("tl", 0, 1, 1);
+PSP_MODULE_INFO("trixlite", 0, 1, 1);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 PSP_HEAP_SIZE_KB(-1024);
 
@@ -63,9 +63,10 @@ static Piece __attribute__((aligned(8))) pieces[NBR_PIECES_LIST] = {
     {0x180018000000000, 0xFF0080FF}
 };
 
-static u32* const vram[2] = {
+static u32* const vram[3] = {
     ((u32*)0x44000000),
-    ((u32*)0x44088000)
+    ((u32*)0x44088000),
+    ((u32*)0x44110000)
 };
 
 void drawBlock(const u8 vid, const u8 x, const u8 y, const u32 color) {
@@ -100,15 +101,26 @@ void draw4Rows(const u8 vid, const u64 value, u8 y, const u32 color) {
     }
 }
 
-u8 isCollid(u16* const target, const u64 piece) {
-    return (*(u64*)target | piece) > (*(u64*)target ^ piece);
+u8 isCollid(u16* const a, const u64 piece) {
+    const u64 target = (((u64)a[0]) << 0) | (((u64)a[1]) << 16) |
+    (((u64)a[2]) << 32) | (((u64)a[3]) << 48);
+    return (target | piece) > (target ^ piece);
+}
+
+void pieceToRows(u16* const target, const u64 piece) {
+    target[3] |= (piece & 0xFFFF000000000000) >> 48;
+    target[2] |= (piece & 0x0000FFFF00000000) >> 32;
+    target[1] |= (piece & 0x00000000FFFF0000) >> 16;
+    target[0] |= (piece & 0x000000000000FFFF);
 }
 
 void drop(u8 from) {
     const u32 bytes = HORIZONTAL_BYTES_LENGTH * BLOCK_SIZE;
-    sceDmacMemcpy((void*)vram[1] + bytes, vram[1], from * bytes);
+    const u32 size = from * bytes;
+    sceDmacMemcpy(vram[2], vram[1], size);
+    sceDmacMemcpy((void*)vram[1] + bytes, vram[2], size);
     do {
-        rows[from] = from > 0 ? rows[from - 1] : 0;
+        rows[from] = from > 0 ? rows[from - 1] : 0x8001;
     } while(from--);
 }
 
@@ -124,9 +136,9 @@ void removeFullRows(u8 step) {
 
 int main() {
     SceCtrlData pad;
-    sceDisplaySetMode(1, SCREEN_WIDTH, SCREEN_HEIGHT);
+    sceDisplaySetMode(0, SCREEN_WIDTH, SCREEN_HEIGHT);
     sceDisplaySetFrameBuf(vram[0], HORIZONTAL_LENGTH,
-    PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
+    PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_NEXTFRAME);
 
     u64 runtick = 0;
     u8 step = NBR_ROWS, id = 0, pressed = 0;
@@ -172,7 +184,7 @@ int main() {
         }
         
         if(isCollid(target, piece.data)) {
-            *(u64*)(target-1) |= piece.data;
+            pieceToRows((u16*)(target-1), piece.data);
             draw4Rows(1, piece.data, step-1, pieces[id].color);
             removeFullRows(step-1);
             piece.data = 0;
@@ -204,7 +216,7 @@ int main() {
             
             keytick = tick;
         }
-        
+    
         sceDisplayWaitVblankStart();
     } while(!(pad.Buttons & PSP_CTRL_SELECT));
     sceKernelExitGame();

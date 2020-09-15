@@ -3,13 +3,13 @@ ELF = main
 OBJS = main.o
 PSPSDK = $(shell psp-config --pspsdk-path)
 CFLAGS = -I. -I$(PSPSDK)/include -g0 -O0 -Wall -D_PSP_FW_VERSION=150
-LDFLAGS = -lpspctrl -lpspuser -lpspkernel -lpspdisplay -lpsprtc
+LDFLAGS = -lc -lpspctrl -lpspuser -lpspkernel -lpspdisplay -lpsprtc
 
 all: EBOOT.PBP
 
 EBOOT.PBP: $(ELF).elf
 	psp-fixup-imports $(ELF).elf
-	mksfo 'title' PARAM.SFO
+	mksfo 'Trixlite' PARAM.SFO
 	psp-strip $(ELF).elf -o $(ELF)_strip.elf
 	pack-pbp EBOOT.PBP PARAM.SFO NULL \
 	NULL NULL NULL \
