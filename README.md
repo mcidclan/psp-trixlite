@@ -1,2 +1,2 @@
 # trixlite
-Small PSP Tetris like homebrew.
+Small PSP Tetris like homebrew coded in few lines.
