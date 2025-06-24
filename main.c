@@ -4,8 +4,10 @@
 #include <psprtc.h>
 
 #define BOARD_X 152
-#define BOARD_Y 4
-#define NBR_ROWS 24
+#define BOARD_Y -27
+#define TOP_MASK 4096
+#define BLOCK_START 2
+#define NBR_ROWS 27
 #define NBR_PIECES 5
 #define NBR_PIECES_LIST 20
 #define BLOCK_SIZE 11
@@ -31,12 +33,12 @@ void exit(int status) {
 typedef struct {
     u64 data;
     u32 color;
-} Piece;
+} Piece __attribute__((aligned(8)));
 
 typedef struct {
     u64 data;
     char pos;
-} MovablePiece;
+} MovablePiece __attribute__((aligned(8)));
 
 static u16 __attribute__((aligned(8))) rows[NBR_ROWS] = {0};
 
@@ -67,19 +69,26 @@ static Piece __attribute__((aligned(8))) pieces[NBR_PIECES_LIST] = {
 };
 
 static u32 const vram[3] = {
-    0x44000000,
-    0x44088000,
-    0x44110000
+    0x44000000 + 0x10000,
+    0x44088000 + 0x20000,
+    0x44110000 + 0x30000
 };
 
 void drawBlock(const u8 vid, const u8 x, const u8 y,
-  const u32 color, const u16 xdisp, const u16 ydisp) {
-    u32* const display = (u32*)vram[vid];
+  const u32 color, const int xdisp, const int ydisp) {
+    const u32 _vram = vram[vid];
+    // u32* const display = (u32*)vram[vid];
     u8 i = BLOCK_SIZE;
     while (--i) {
         u8 j = BLOCK_SIZE;
         while (--j) {
-            display[(i+x*BLOCK_SIZE+xdisp) | ((j+y*BLOCK_SIZE+ydisp) << 9)] = color;
+            // display[(i+x*BLOCK_SIZE+xdisp) | ((j+y*BLOCK_SIZE+ydisp) << 9)] = color;
+            
+            u32 display = _vram + (
+              (i+x*BLOCK_SIZE + xdisp) +
+              (j+y*BLOCK_SIZE + ydisp) * 512
+            ) * 4;
+            *((u32*)display) = color;
         }
     }
 }
@@ -100,7 +109,7 @@ void draw4Rows(const u8 vid, const u64 value, u8 y, const u32 color) {
         if (!_x) {
             y++;
         }
-        if (value & (0x8000000000000000 >> x)) {
+        if (value & (0x8000000000000000 >> x) && y > BLOCK_START) {
             drawBlock(vid, _x, y, color, BOARD_X, BOARD_Y);
         }
     }
@@ -138,7 +147,7 @@ void drop(u8 from) {
 
 void reset() {
     u8 step = 0;
-    const u8 end = NBR_ROWS - 1;
+    const u8 end = (NBR_ROWS - 1);
     while (step < end) {
         drop(step++);
     }
@@ -172,21 +181,25 @@ int main() {
         rows[step] = (step == NBR_ROWS - 1) ? 0xFFFF : 0x8001;
         drawRow(1, rows[step], step, 0xFF808080);
     }
-
+    
     do {
-        sceDmacMemcpy((void*)vram[0], (void*)vram[1], HORIZONTAL_BYTES_LENGTH * SCREEN_HEIGHT);
-        sceCtrlReadBufferPositive(&pad, 1);
-
         u64 tick = 0;
         sceRtcGetCurrentTick(&tick);
+        sceCtrlReadBufferPositive(&pad, 1);
+        
+        sceDmacMemcpy(
+          (void*)(vram[0] + TOP_MASK),
+          (void*)(vram[1] + TOP_MASK),
+          HORIZONTAL_BYTES_LENGTH * SCREEN_HEIGHT - TOP_MASK
+        );
 
         if (!piece.data) {
             id = ((u8)(tick / 3)) % NBR_PIECES;
             piece.data = pieces[id].data;
             piece.pos = 0;
             initial = piece;
-            step = 0;
-            if (!prevStep) {
+            step = BLOCK_START;
+            if (prevStep == BLOCK_START) {
               reset();
             }
         }
