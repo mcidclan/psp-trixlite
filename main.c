@@ -77,13 +77,10 @@ static u32 const vram[3] = {
 void drawBlock(const u8 vid, const u8 x, const u8 y,
   const u32 color, const int xdisp, const int ydisp) {
     const u32 _vram = vram[vid];
-    // u32* const display = (u32*)vram[vid];
     u8 i = BLOCK_SIZE;
     while (--i) {
         u8 j = BLOCK_SIZE;
         while (--j) {
-            // display[(i+x*BLOCK_SIZE+xdisp) | ((j+y*BLOCK_SIZE+ydisp) << 9)] = color;
-            
             u32 display = _vram + (
               (i+x*BLOCK_SIZE + xdisp) +
               (j+y*BLOCK_SIZE + ydisp) * 512
@@ -189,10 +186,10 @@ int main() {
         
         sceDmacMemcpy(
           (void*)(vram[0] + TOP_MASK),
-          (void*)(vram[1] + TOP_MASK),
+          (void*)(vram[2] + TOP_MASK),
           HORIZONTAL_BYTES_LENGTH * SCREEN_HEIGHT - TOP_MASK
         );
-
+        
         if (!piece.data) {
             id = ((u8)(tick / 3)) % NBR_PIECES;
             piece.data = pieces[id].data;
@@ -205,8 +202,14 @@ int main() {
         }
         prevStep = step;
         
-        draw4Rows(0, piece.data, step, pieces[id].color);
-    
+        sceDmacMemcpy(
+          (void*)(vram[2] + TOP_MASK),
+          (void*)(vram[1] + TOP_MASK),
+          HORIZONTAL_BYTES_LENGTH * SCREEN_HEIGHT - TOP_MASK
+        );
+        
+        draw4Rows(2, piece.data, step, pieces[id].color);
+        
         const u16 stepDuration = pad.Buttons & PSP_CTRL_DOWN ? 50 : 500;
         u16* target = &rows[step];
         
