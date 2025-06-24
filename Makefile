@@ -2,7 +2,7 @@ CC = psp-gcc
 ELF = main
 OBJS = main.o
 PSPSDK = $(shell psp-config --pspsdk-path)
-CFLAGS = -I. -I$(PSPSDK)/include -g0 -O0 -Wall -D_PSP_FW_VERSION=150
+CFLAGS = -I. -I$(PSPSDK)/include -g0 -O0 -Wall -D_PSP_FW_VERSION=660
 LDFLAGS = -lc -lpspctrl -lpspuser -lpspkernel -lpspdisplay -lpsprtc
 
 all: EBOOT.PBP
