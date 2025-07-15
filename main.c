@@ -254,6 +254,6 @@ int main() {
             keytick = tick;
         }
         sceDisplayWaitVblankStart();
-    } while (!(pad.Buttons & PSP_CTRL_SELECT));
+    } while (!(pad.Buttons & PSP_CTRL_HOME));
     return 0;
 }
